@@ -21,7 +21,7 @@
 <body>
     <!-- The canvas will be inserted by the script -->
     <script>
-        // Your createPixelGlass function
+        // Create the pixelated hourglass visualization
         var createPixelGlass = function(){
             // Numerical codes representing different cell types
             var pixelCodes = {
@@ -45,7 +45,7 @@
                 height: 100,          // Total cells high
                 offsetX: 0,           // X Offset entire cell grid within canvas 
                 offsetY: 0,           // Y Offset entire cell grid within canvas
-                cylinderHeight: 34,   // Variable determines hourglass shape
+                cylinderHeight: 30,   // Adjusted to make the middle gap smaller
                 timeStep: 30,         // Smaller number gives smoother animation but worse performance
                 touchRadius: 4,       // Size of area affected by mouse/touch
                 interactive: true,    // Whether or not the mouse/touch will affect sand
@@ -66,6 +66,7 @@
                 }
             };
 
+            // Make mousePosition accessible throughout the script
             var mousePosition = { x: 0, y: 0 };
 
             var HourGlass = function(config){
@@ -81,6 +82,18 @@
                 this.grainDropDelay = 0;
                 this.leftToRight = false;
                 this.create();
+
+                // Add mouse event listener if interactive
+                if (this.config.interactive) {
+                    var me = this;
+                    this.canvas.addEventListener('mousemove', function(event){
+                        var rect = me.canvas.getBoundingClientRect();
+                        var scaleX = me.config.width / rect.width;
+                        var scaleY = me.config.height / rect.height;
+                        mousePosition.x = (event.clientX - rect.left) * scaleX;
+                        mousePosition.y = (event.clientY - rect.top) * scaleY;
+                    });
+                }
             };
 
             HourGlass.prototype.create = function(){
@@ -170,13 +183,13 @@
                         // Ignore background tiles
                         if (cell != pixelCodes.background) {
                             context.fillStyle = this.config.pixelColors[cell];
-                            
+
                             if (cell == pixelCodes.dummySand){
                                 context.fillStyle = this.config.pixelColors[pixelCodes.sand1];
                             }
                             context.fillRect(
-                                (x + this.config.offsetX) * s + (s / 2),
-                                (y + this.config.offsetY) * s + (s / 2),
+                                (x + this.config.offsetX) * s,
+                                (y + this.config.offsetY) * s,
                                 s,
                                 s
                             );
@@ -190,7 +203,7 @@
                 var now = Date.now(),
                     updated = false,
                     dt = this.config.timeStep;
-                
+
                 state.timeAcc += now - state.lastFrame;
                 state.lastFrame = now;
 
@@ -234,19 +247,21 @@
                     blockedBottomRight = this.tiles[y + 1][x + 1] > interior;
 
                 // Handle mouse interaction with sand
-                var mouseSize = this.config.touchRadius,
-                    dx = this.config.offsetX,
-                    dy = this.config.offsetY,
-                    mx = mousePosition.x,
-                    my = mousePosition.y;
+                if (this.config.interactive) {
+                    var mouseSize = this.config.touchRadius,
+                        dx = this.config.offsetX,
+                        dy = this.config.offsetY,
+                        mx = mousePosition.x,
+                        my = mousePosition.y;
 
-                if (
-                    x > mx - mouseSize - dx && x < mx + mouseSize - dx &&
-                    y < my + mouseSize / 2 - dy && y > my - mouseSize / 2 - dy
-                ) {
-                    blockedBottom = true;
-                    blockedBottomLeft = true;
-                    blockedBottomRight = true;
+                    if (
+                        x > mx - mouseSize - dx && x < mx + mouseSize - dx &&
+                        y < my + mouseSize / 2 - dy && y > my - mouseSize / 2 - dy
+                    ) {
+                        blockedBottom = true;
+                        blockedBottomLeft = true;
+                        blockedBottomRight = true;
+                    }
                 }
 
                 // Remove dummy sand from simulation
@@ -371,14 +386,6 @@
         // Optional: Change the sand hue
         // hourglass.setHue(30); // Hue value between 0 and 360
 
-        // Optional: Make the hourglass interactive (sand moves when you click)
-        hourglass.getCanvas().addEventListener('mousemove', function(event){
-            var rect = hourglass.getCanvas().getBoundingClientRect();
-            var scaleX = hourglass.hourglass.config.width / rect.width;
-            var scaleY = hourglass.hourglass.config.height / rect.height;
-            mousePosition.x = (event.clientX - rect.left) * scaleX;
-            mousePosition.y = (event.clientY - rect.top) * scaleY;
-        });
     </script>
 </body>
 </html>
