@@ -2,174 +2,212 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <title>Interactive Hourglass Timer</title>
+    <title>Interactive Hourglass</title>
     <style>
-        /* General Styles */
         body {
+            margin: 0;
+            overflow: hidden;
+            background-color: #f0e68c; /* Sand-like background */
             display: flex;
-            flex-direction: column;
+            justify-content: center;
             align-items: center;
-            font-family: Arial, sans-serif;
-            margin: 50px;
+            height: 100vh;
+            flex-direction: column;
         }
-
-        .controls {
-            margin-top: 20px;
+        #hourglassCanvas {
+            background-color: #ffffff;
+            border: 2px solid #000;
         }
-
-        button {
-            margin: 0 10px;
+        #startButton {
             padding: 10px 20px;
             font-size: 16px;
+            margin-bottom: 10px;
             cursor: pointer;
         }
-
-        /* Hourglass Styles */
-        .hourglass-container {
-            position: relative;
-            width: 120px;
-            height: 240px;
-        }
-
-        .hourglass {
-            position: relative;
-            width: 100%;
-            height: 100%;
-        }
-
-        /* Hourglass Shape */
-        .hourglass::before,
-        .hourglass::after {
-            content: '';
-            position: absolute;
-            width: 100%;
-            height: 50%;
-            border: 5px solid #000;
-            box-sizing: border-box;
-            background: linear-gradient(to bottom, #fff, #e0e0e0);
-        }
-
-        .hourglass::before {
-            top: 0;
-            border-bottom: none;
-            border-top-left-radius: 60px 60px;
-            border-top-right-radius: 60px 60px;
-        }
-
-        .hourglass::after {
-            bottom: 0;
-            border-top: none;
-            border-bottom-left-radius: 60px 60px;
-            border-bottom-right-radius: 60px 60px;
-        }
-
-        /* Sand Styles */
-        .sand-top,
-        .sand-bottom {
-            position: absolute;
-            width: 80%;
-            background: #f4c542;
-            left: 10%;
-        }
-
-        .sand-top {
-            top: 5%;
-            height: 45%;
-            border-top-left-radius: 50% 50%;
-            border-top-right-radius: 50% 50%;
-            overflow: hidden;
-            animation: sand-fall 10s linear forwards paused;
-        }
-
-        .sand-bottom {
-            bottom: 5%;
-            height: 0;
-            border-bottom-left-radius: 50% 50%;
-            border-bottom-right-radius: 50% 50%;
-            animation: sand-rise 10s linear forwards paused;
-        }
-
-        .sand-stream {
-            position: absolute;
-            top: 50%;
-            left: 49%;
-            width: 2%;
-            height: 0;
-            background: #f4c542;
-            animation: sand-stream 10s linear forwards paused;
-        }
-
-        /* Animations */
-        @keyframes sand-fall {
-            to {
-                height: 0;
+        /* Responsive styling */
+        @media (max-width: 600px) {
+            #hourglassCanvas {
+                width: 300px;
+                height: 600px;
             }
         }
-
-        @keyframes sand-rise {
-            to {
-                height: 45%;
-            }
-        }
-
-        @keyframes sand-stream {
-            to {
-                height: 50%;
+        @media (min-width: 601px) {
+            #hourglassCanvas {
+                width: 400px;
+                height: 800px;
             }
         }
     </style>
 </head>
 <body>
-    <h1>Interactive Hourglass Timer</h1>
-    <div class="hourglass-container">
-        <div class="hourglass">
-            <div class="sand-top"></div>
-            <div class="sand-stream"></div>
-            <div class="sand-bottom"></div>
-        </div>
-    </div>
-    <div class="controls">
-        <button id="startBtn">Start</button>
-        <button id="pauseBtn">Pause</button>
-        <button id="resetBtn">Reset</button>
-    </div>
-
+    <button id="startButton">Start Hourglass</button>
+    <canvas id="hourglassCanvas" width="400" height="800"></canvas>
     <script>
-        // Select elements
-        const startBtn = document.getElementById('startBtn');
-        const pauseBtn = document.getElementById('pauseBtn');
-        const resetBtn = document.getElementById('resetBtn');
-        const sandTop = document.querySelector('.sand-top');
-        const sandBottom = document.querySelector('.sand-bottom');
-        const sandStream = document.querySelector('.sand-stream');
+        // Initialize gravity
+        let gravity = { x: 0, y: 1 };
 
-        // Start Animation
-        startBtn.addEventListener('click', () => {
-            sandTop.style.animationPlayState = 'running';
-            sandBottom.style.animationPlayState = 'running';
-            sandStream.style.animationPlayState = 'running';
-        });
+        // Handle motion events
+        function handleMotionEvent(event) {
+            // On some devices, the axes might be inverted
+            gravity.x = event.accelerationIncludingGravity.x || 0;
+            gravity.y = event.accelerationIncludingGravity.y || 0;
+        }
 
-        // Pause Animation
-        pauseBtn.addEventListener('click', () => {
-            sandTop.style.animationPlayState = 'paused';
-            sandBottom.style.animationPlayState = 'paused';
-            sandStream.style.animationPlayState = 'paused';
-        });
+        // Request permission to access motion sensors
+        function requestMotionPermission() {
+            if (typeof DeviceMotionEvent.requestPermission === 'function') {
+                // For iOS devices
+                DeviceMotionEvent.requestPermission()
+                    .then(permissionState => {
+                        if (permissionState === 'granted') {
+                            window.addEventListener('devicemotion', handleMotionEvent);
+                            document.getElementById('startButton').style.display = 'none';
+                        } else {
+                            alert("Permission not granted.");
+                        }
+                    })
+                    .catch(console.error);
+            } else {
+                // For other devices
+                window.addEventListener('devicemotion', handleMotionEvent);
+                document.getElementById('startButton').style.display = 'none';
+            }
+        }
 
-        // Reset Animation
-        resetBtn.addEventListener('click', () => {
-            sandTop.style.animation = 'none';
-            sandBottom.style.animation = 'none';
-            sandStream.style.animation = 'none';
+        document.getElementById('startButton').addEventListener('click', requestMotionPermission);
 
-            // Trigger reflow to restart the animations
-            void sandTop.offsetWidth;
+        const canvas = document.getElementById('hourglassCanvas');
+        const ctx = canvas.getContext('2d');
 
-            sandTop.style.animation = 'sand-fall 10s linear forwards paused';
-            sandBottom.style.animation = 'sand-rise 10s linear forwards paused';
-            sandStream.style.animation = 'sand-stream 10s linear forwards paused';
-        });
+        // Adjust canvas size based on device pixel ratio for better clarity
+        function adjustCanvasSize() {
+            const dpr = window.devicePixelRatio || 1;
+            canvas.width = canvas.clientWidth * dpr;
+            canvas.height = canvas.clientHeight * dpr;
+            ctx.scale(dpr, dpr);
+        }
+        adjustCanvasSize();
+
+        // Particle setup
+        const particles = [];
+        const numParticles = 500;
+
+        // Initialize particles in the upper chamber
+        for (let i = 0; i < numParticles; i++) {
+            particles.push({
+                x: canvas.width / 2 + (Math.random() - 0.5) * (canvas.width * 0.2),
+                y: canvas.height * 0.25 + Math.random() * (canvas.height * 0.2),
+                vx: 0,
+                vy: 0,
+                radius: 2
+            });
+        }
+
+        // Draw hourglass shape
+        function drawHourglassShape() {
+            ctx.beginPath();
+            // Upper triangle
+            ctx.moveTo(canvas.width * 0.25, 0);
+            ctx.lineTo(canvas.width * 0.75, 0);
+            ctx.lineTo(canvas.width * 0.5, canvas.height * 0.5);
+            ctx.closePath();
+            // Lower triangle
+            ctx.moveTo(canvas.width * 0.25, canvas.height);
+            ctx.lineTo(canvas.width * 0.75, canvas.height);
+            ctx.lineTo(canvas.width * 0.5, canvas.height * 0.5);
+            ctx.closePath();
+        }
+
+        // Update particle positions
+        function updateParticles() {
+            particles.forEach(p => {
+                // Update velocities based on gravity
+                p.vx += gravity.x * 0.05;
+                p.vy += gravity.y * 0.05;
+
+                // Update positions
+                p.x += p.vx;
+                p.y += p.vy;
+
+                // Constrain particles within the hourglass shape
+                // Upper chamber
+                if (p.y < canvas.height * 0.5) {
+                    const leftBound = canvas.width * 0.25 + (p.y / (canvas.height * 0.5)) * (canvas.width * 0.25);
+                    const rightBound = canvas.width * 0.75 - (p.y / (canvas.height * 0.5)) * (canvas.width * 0.25);
+                    if (p.x < leftBound) {
+                        p.x = leftBound;
+                        p.vx *= -0.5;
+                    } else if (p.x > rightBound) {
+                        p.x = rightBound;
+                        p.vx *= -0.5;
+                    }
+                } else {
+                    // Lower chamber
+                    const progress = (p.y - canvas.height * 0.5) / (canvas.height * 0.5);
+                    const leftBound = canvas.width * 0.25 + (1 - progress) * (canvas.width * 0.25);
+                    const rightBound = canvas.width * 0.75 - (1 - progress) * (canvas.width * 0.25);
+                    if (p.x < leftBound) {
+                        p.x = leftBound;
+                        p.vx *= -0.5;
+                    } else if (p.x > rightBound) {
+                        p.x = rightBound;
+                        p.vx *= -0.5;
+                    }
+                }
+
+                // Bottom boundary
+                if (p.y > canvas.height - p.radius) {
+                    p.y = canvas.height - p.radius;
+                    p.vy *= -0.5;
+                }
+
+                // Top boundary
+                if (p.y < p.radius) {
+                    p.y = p.radius;
+                    p.vy *= -0.5;
+                }
+
+                // Dampen velocities
+                p.vx *= 0.99;
+                p.vy *= 0.99;
+            });
+        }
+
+        // Draw particles and hourglass
+        function drawParticles() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            // Draw hourglass outline
+            ctx.strokeStyle = '#000';
+            ctx.lineWidth = 2;
+            drawHourglassShape();
+            ctx.stroke();
+
+            // Clip to the hourglass shape
+            ctx.save();
+            ctx.beginPath();
+            drawHourglassShape();
+            ctx.clip();
+
+            // Draw particles
+            ctx.fillStyle = '#a0522d'; // Sand color
+            particles.forEach(p => {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, p.radius, 0, Math.PI * 2);
+                ctx.fill();
+            });
+
+            ctx.restore();
+        }
+
+        // Animation loop
+        function animate() {
+            updateParticles();
+            drawParticles();
+            requestAnimationFrame(animate);
+        }
+
+        animate();
     </script>
 </body>
 </html>
