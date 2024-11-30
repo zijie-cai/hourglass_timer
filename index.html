@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Interactive Hourglass Timer</title>
+    <style>
+        /* General Styles */
+        body {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            font-family: Arial, sans-serif;
+            margin: 50px;
+        }
+
+        .controls {
+            margin-top: 20px;
+        }
+
+        button {
+            margin: 0 10px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        /* Hourglass Styles */
+        .hourglass-container {
+            position: relative;
+            width: 120px;
+            height: 240px;
+        }
+
+        .hourglass {
+            position: relative;
+            width: 100%;
+            height: 100%;
+        }
+
+        /* Hourglass Shape */
+        .hourglass::before,
+        .hourglass::after {
+            content: '';
+            position: absolute;
+            width: 100%;
+            height: 50%;
+            border: 5px solid #000;
+            box-sizing: border-box;
+            background: linear-gradient(to bottom, #fff, #e0e0e0);
+        }
+
+        .hourglass::before {
+            top: 0;
+            border-bottom: none;
+            border-top-left-radius: 60px 60px;
+            border-top-right-radius: 60px 60px;
+        }
+
+        .hourglass::after {
+            bottom: 0;
+            border-top: none;
+            border-bottom-left-radius: 60px 60px;
+            border-bottom-right-radius: 60px 60px;
+        }
+
+        /* Sand Styles */
+        .sand-top,
+        .sand-bottom {
+            position: absolute;
+            width: 80%;
+            background: #f4c542;
+            left: 10%;
+        }
+
+        .sand-top {
+            top: 5%;
+            height: 45%;
+            border-top-left-radius: 50% 50%;
+            border-top-right-radius: 50% 50%;
+            overflow: hidden;
+            animation: sand-fall 10s linear forwards paused;
+        }
+
+        .sand-bottom {
+            bottom: 5%;
+            height: 0;
+            border-bottom-left-radius: 50% 50%;
+            border-bottom-right-radius: 50% 50%;
+            animation: sand-rise 10s linear forwards paused;
+        }
+
+        .sand-stream {
+            position: absolute;
+            top: 50%;
+            left: 49%;
+            width: 2%;
+            height: 0;
+            background: #f4c542;
+            animation: sand-stream 10s linear forwards paused;
+        }
+
+        /* Animations */
+        @keyframes sand-fall {
+            to {
+                height: 0;
+            }
+        }
+
+        @keyframes sand-rise {
+            to {
+                height: 45%;
+            }
+        }
+
+        @keyframes sand-stream {
+            to {
+                height: 50%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <h1>Interactive Hourglass Timer</h1>
+    <div class="hourglass-container">
+        <div class="hourglass">
+            <div class="sand-top"></div>
+            <div class="sand-stream"></div>
+            <div class="sand-bottom"></div>
+        </div>
+    </div>
+    <div class="controls">
+        <button id="startBtn">Start</button>
+        <button id="pauseBtn">Pause</button>
+        <button id="resetBtn">Reset</button>
+    </div>
+
+    <script>
+        // Select elements
+        const startBtn = document.getElementById('startBtn');
+        const pauseBtn = document.getElementById('pauseBtn');
+        const resetBtn = document.getElementById('resetBtn');
+        const sandTop = document.querySelector('.sand-top');
+        const sandBottom = document.querySelector('.sand-bottom');
+        const sandStream = document.querySelector('.sand-stream');
+
+        // Start Animation
+        startBtn.addEventListener('click', () => {
+            sandTop.style.animationPlayState = 'running';
+            sandBottom.style.animationPlayState = 'running';
+            sandStream.style.animationPlayState = 'running';
+        });
+
+        // Pause Animation
+        pauseBtn.addEventListener('click', () => {
+            sandTop.style.animationPlayState = 'paused';
+            sandBottom.style.animationPlayState = 'paused';
+            sandStream.style.animationPlayState = 'paused';
+        });
+
+        // Reset Animation
+        resetBtn.addEventListener('click', () => {
+            sandTop.style.animation = 'none';
+            sandBottom.style.animation = 'none';
+            sandStream.style.animation = 'none';
+
+            // Trigger reflow to restart the animations
+            void sandTop.offsetWidth;
+
+            sandTop.style.animation = 'sand-fall 10s linear forwards paused';
+            sandBottom.style.animation = 'sand-rise 10s linear forwards paused';
+            sandStream.style.animation = 'sand-stream 10s linear forwards paused';
+        });
+    </script>
+</body>
+</html>
