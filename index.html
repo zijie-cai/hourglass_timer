@@ -1,11 +1,11 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Enhanced Pixelated Digital Hourglass Visualization</title>
+    <title>Pixelated Digital Hourglass Visualization</title>
     <style>
         body {
             margin: 0;
-            background: linear-gradient(to bottom, #1e3c72, #2a5298); /* Background gradient */
+            background-color: #222;
             display: flex;
             align-items: center;
             justify-content: center;
@@ -40,29 +40,29 @@
             };
 
             var defaultConfig = {
-                pixelSize: 3,        // Adjusted pixel size for better visibility
-                width: 99,           // Total cells wide
-                height: 150,         // Total cells high (increased height for a taller hourglass)
-                offsetX: 0,          // X Offset entire cell grid within canvas 
-                offsetY: 0,          // Y Offset entire cell grid within canvas
-                cylinderHeight: 20,  // Adjusted to make the middle gap smaller and shape more elegant
-                timeStep: 30,        // Smaller number gives smoother animation but worse performance
-                touchRadius: 4,      // Size of area affected by mouse/touch
-                interactive: true,   // Whether or not the mouse/touch will affect sand
+                pixelSize: 2.9,       // This has the same effect as scaling the canvas but without loss of interactivity
+                width: 99,            // Total cells wide
+                height: 100,          // Total cells high
+                offsetX: 0,           // X Offset entire cell grid within canvas 
+                offsetY: 0,           // Y Offset entire cell grid within canvas
+                cylinderHeight: 30,   // Adjusted to make the middle gap smaller
+                timeStep: 30,         // Smaller number gives smoother animation but worse performance
+                touchRadius: 4,       // Size of area affected by mouse/touch
+                interactive: true,    // Whether or not the mouse/touch will affect sand
                 transparentBackground: true,
                 pixelColors : {
-                    0: "rgba(0,0,0,0)",  // Transparent background
-                    1: "rgba(255,255,255,0.1)", // Interior
-                    2: "rgba(200,200,255,0.3)", // Hourglass walls (light blue with transparency)
-                    3: "rgba(200,200,255,0.4)", // Hourglass walls 2
-                    4: "#8B4513",        // Base (saddle brown)
-                    5: "#A0522D",        // Base 2 (sienna)
-                    6: "#CD853F",        // Base 3 (peru)
-                    7: "#D3D3D3",        // Stopper (light gray)
-                    8: "#F0E68C",        // Sand 1 (khaki)
-                    9: "#EEE8AA",        // Sand 2 (pale goldenrod)
-                    10:"#FAFAD2",        // Sand 3 (light goldenrod yellow)
-                    11:"#F5DEB3",        // Dummy sand (wheat)
+                    0: "rgba(1,1,1,1)",  // Background color
+                    1: "rgba(0,0,50,.1)", // Interior
+                    2: "#6acfdd",        // Hourglass walls
+                    3: "#ffef00",        // Hourglass walls 2
+                    4: "#6e4e03",        // Base
+                    5: "#553c01",        // Base 2
+                    6: "#845600",        // Base 3
+                    7: "#e2e2e2",        // Stopper
+                    8: "hsl(55,70%,60%)", // Sand 1
+                    9: "hsl(55,65%,50%)", // Sand 2
+                    10:"hsl(55,80%,65%)", // Sand 3 
+                    11: "#ffe96c",       // Dummy sand 
                 }
             };
 
@@ -123,7 +123,7 @@
                         // Hourglass walls
                         else if (x == z || x == z + 1 || x == (w - z - 1) || x == (w - z - 2)) {
                             // Magic number determines where middle ring lies
-                            var ringRatio = 1.2; // Adjusted for shape refinement
+                            var ringRatio = 1.4;
                             var c = y >= (this.config.cylinderHeight * ringRatio) ? pixelCodes.walls2 : pixelCodes.walls;
                             topRow.push(c);
                             bottomRow.push(c);
@@ -146,7 +146,7 @@
                     }
 
                     // Add rows to top/bottom arrays
-                    if (z < w / 2 - 5 && y > this.config.cylinderHeight) z++;
+                    if (z < w / 2 - 3 && y > this.config.cylinderHeight) z++;
                     topHalf.push(topRow);
                     bottomHalf.push(bottomRow);
                 }
@@ -170,9 +170,11 @@
                     s = this.config.pixelSize,
                     cw = this.canvas.width,
                     ch = this.canvas.height;  
+                context.fillStyle = this.config.pixelColors[pixelCodes.background];    
 
                 // Clear canvas for next frame
-                context.clearRect(0, 0, cw, ch);
+                if (this.config.transparentBackground) context.clearRect(0, 0, cw, ch);
+                else context.fillRect(0, 0, cw, ch);
 
                 // Draw cells
                 for (var y = 0; y < h; y++) {
@@ -180,21 +182,11 @@
                         var cell = this.tiles[y][x];
                         // Ignore background tiles
                         if (cell != pixelCodes.background) {
-                            // Apply gradient to sand
-                            if (cell >= pixelCodes.sand1 && cell <= pixelCodes.sand3) {
-                                var gradient = context.createLinearGradient(
-                                    (x + this.config.offsetX) * s,
-                                    (y + this.config.offsetY) * s,
-                                    (x + this.config.offsetX) * s,
-                                    (y + this.config.offsetY + 1) * s
-                                );
-                                gradient.addColorStop(0, this.config.pixelColors[cell]);
-                                gradient.addColorStop(1, "#DAA520"); // Goldenrod at the bottom
-                                context.fillStyle = gradient;
-                            } else {
-                                context.fillStyle = this.config.pixelColors[cell];
-                            }
+                            context.fillStyle = this.config.pixelColors[cell];
 
+                            if (cell == pixelCodes.dummySand){
+                                context.fillStyle = this.config.pixelColors[pixelCodes.sand1];
+                            }
                             context.fillRect(
                                 (x + this.config.offsetX) * s,
                                 (y + this.config.offsetY) * s,
