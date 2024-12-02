@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pixelated Digital Hourglass Visualization</title>
+    <title>Rotating Pixelated Digital Hourglass Visualization</title>
     <style>
         body {
             margin: 0;
@@ -21,7 +21,7 @@
 <body>
     <!-- The canvas will be inserted by the script -->
     <script>
-        // Create the pixelated hourglass visualization
+        // Create the pixelated rotating hourglass visualization
         var createPixelGlass = function(){
             // Numerical codes representing different cell types
             var pixelCodes = {
@@ -81,6 +81,23 @@
                 this.running = false;
                 this.grainDropDelay = 0;
                 this.leftToRight = false;
+                this.theta = 0; // Rotation angle
+                this.angularVelocity = 0; // Angular velocity
+                this.gx = 0; // Gravity vector x component
+                this.gy = 1; // Gravity vector y component
+
+                // Define neighbor offsets
+                this.neighborOffsets = [
+                    {dx: -1, dy: -1},
+                    {dx: 0, dy: -1},
+                    {dx: 1, dy: -1},
+                    {dx: -1, dy: 0},
+                    {dx: 1, dy: 0},
+                    {dx: -1, dy: 1},
+                    {dx: 0, dy: 1},
+                    {dx: 1, dy: 1}
+                ];
+
                 this.create();
 
                 // Add mouse event listener if interactive
@@ -176,6 +193,17 @@
                 if (this.config.transparentBackground) context.clearRect(0, 0, cw, ch);
                 else context.fillRect(0, 0, cw, ch);
 
+                context.save();
+
+                // Translate to center
+                context.translate(cw / 2, ch / 2);
+
+                // Rotate
+                context.rotate(this.theta);
+
+                // Translate back
+                context.translate(-cw / 2, -ch / 2);
+
                 // Draw cells
                 for (var y = 0; y < h; y++) {
                     for (var x = 0; x < w; x++) {
@@ -196,6 +224,8 @@
                         }
                     }
                 }
+
+                context.restore();
             };
 
             HourGlass.prototype.update = function(state){
@@ -211,6 +241,26 @@
                     updated = true;
                     state.timeAcc -= dt;
                     state.grainTimeAcc += dt;
+
+                    // Update rotation angle
+                    var dtSeconds = dt / 1000; // Convert to seconds if necessary
+                    this.theta += this.angularVelocity * dt;
+                    this.theta = this.theta % (2 * Math.PI);
+
+                    // Update gravity vector
+                    this.gx = Math.sin(this.theta);
+                    this.gy = Math.cos(this.theta);
+
+                    // Compute dot products and sort neighborOffsets
+                    for (var i = 0; i < this.neighborOffsets.length; i++) {
+                        var o = this.neighborOffsets[i];
+                        o.dot = this.gx * o.dx + this.gy * o.dy;
+                    }
+
+                    this.neighborOffsets.sort(function(a, b){
+                        return b.dot - a.dot;
+                    });
+
                     if (state.grainTimeAcc >= this.grainDropDelay) {
                         this.updateDelay(this.time - (Date.now() - state.startTime));
                         state.grainTimeAcc = 0;
@@ -235,81 +285,103 @@
             };
 
             HourGlass.prototype.updateCell = function(x, y){
-                // Only sand cells get updated
                 if (this.tiles[y][x] < pixelCodes.sand1) return;
-                var interior = pixelCodes.interior;
-                // Inspect neighbours
-                var blockedBottom = this.tiles[y + 1][x] > interior,
-                    blockedTop = this.tiles[y - 1][x] > interior,
-                    blockedRight = this.tiles[y][x + 1] > interior,
-                    blockedLeft = this.tiles[y][x - 1] > interior,
-                    blockedBottomLeft = this.tiles[y + 1][x - 1] > interior,
-                    blockedBottomRight = this.tiles[y + 1][x + 1] > interior;
 
-                // Handle mouse interaction with sand
-                if (this.config.interactive) {
-                    var mouseSize = this.config.touchRadius,
-                        dx = this.config.offsetX,
-                        dy = this.config.offsetY,
-                        mx = mousePosition.x,
-                        my = mousePosition.y;
+                var tile = this.tiles[y][x];
 
-                    if (
-                        x > mx - mouseSize - dx && x < mx + mouseSize - dx &&
-                        y < my + mouseSize / 2 - dy && y > my - mouseSize / 2 - dy
-                    ) {
-                        blockedBottom = true;
-                        blockedBottomLeft = true;
-                        blockedBottomRight = true;
+                // For each neighbor offset in sorted neighborOffsets
+                for (var i = 0; i < this.neighborOffsets.length; i++) {
+                    var o = this.neighborOffsets[i];
+                    var nx = x + o.dx;
+                    var ny = y + o.dy;
+
+                    // Check boundaries
+                    if (nx < 0 || nx >= this.config.width || ny < 0 || ny >= this.config.height) continue;
+
+                    var neighborTile = this.tiles[ny][nx];
+
+                    // If neighbor cell is empty (interior)
+                    if (neighborTile == pixelCodes.interior || neighborTile == pixelCodes.dummySand) {
+
+                        // Handle mouse interaction
+                        if (this.config.interactive) {
+                            var mouseSize = this.config.touchRadius,
+                                dx = this.config.offsetX,
+                                dy = this.config.offsetY,
+                                mx = mousePosition.x,
+                                my = mousePosition.y;
+
+                            if (
+                                nx > mx - mouseSize - dx && nx < mx + mouseSize - dx &&
+                                ny < my + mouseSize / 2 - dy && ny > my - mouseSize / 2 - dy
+                            ) {
+                                // Skip this neighbor
+                                continue;
+                            }
+                        }
+
+                        // Move the sand grain
+                        this.tiles[ny][nx] = tile;
+                        this.tiles[y][x] = neighborTile;
+                        break;
                     }
                 }
-
-                // Remove dummy sand from simulation
-                if (
-                    this.tiles[y][x] == pixelCodes.dummySand &&
-                    blockedBottom && blockedTop && blockedLeft && blockedRight
-                ) {
-                    this.tiles[y][x] = interior;
-                    return;
-                }
-
-                // Adjust when a grain of sand will move laterally
-                var n = 1,
-                    r = Math.floor(Math.random() * (this.config.cylinderHeight * n)),
-                    w = this.config.width,
-                    h = this.config.height;
-
-                // Movement rules
-                if (!blockedBottom) this.moveCell(x, y, 0, 1); // Down
-                else if (!blockedBottomLeft) this.moveCell(x, y, -1, 1); // Down & left
-                else if (!blockedBottomRight) this.moveCell(x, y, 1, 1); // Down & right
-                else if (x < Math.floor(w / 2) - r && !blockedRight && y < Math.floor(h / 2)) this.moveCell(x, y, 1, 0); // Move right
-                else if (x > Math.floor(w / 2) + r && !blockedLeft && y < Math.floor(h / 2)) this.moveCell(x, y, -1, 0); // Move left  
-                else if (x < Math.floor(w / 2) - r * 3 && !blockedLeft && blockedRight && y > Math.floor(h / 2)) this.moveCell(x, y, -1, 0); // Move left
-                else if (x > Math.floor(w / 2) + r * 3 && !blockedRight && blockedLeft && y > Math.floor(h / 2)) this.moveCell(x, y, 1, 0); // Move right
             };
 
             HourGlass.prototype.dropGrain = function(){
-                // The stopper acts like a wall
                 var stoppery = Math.floor(this.config.height / 2),
-                    stopperx = Math.floor(this.config.width / 2),
-                    tileAbove = this.tiles[stoppery - 1][stopperx],
-                    tileBelow = this.tiles[stoppery + 1][stopperx];
+                    stopperx = Math.floor(this.config.width / 2);
 
-                if (
-                    (tileBelow == pixelCodes.interior || tileBelow == pixelCodes.dummySand) &&
-                    (tileAbove >= pixelCodes.sand1)
-                ) {
-                    this.grainsDropped++;
-                    this.moveCell(stopperx, stoppery - 1, 0, 2);
+                // Find the offset opposite to gravity
+                var gx = -this.gx;
+                var gy = -this.gy;
+
+                // Compute the offset (dx, dy) by rounding gx and gy to nearest integers
+                var dx = Math.round(gx);
+                var dy = Math.round(gy);
+
+                var xAbove = stopperx + dx;
+                var yAbove = stoppery + dy;
+
+                var xBelow = stopperx - dx;
+                var yBelow = stoppery - dy;
+
+                // Check if tiles are within bounds
+                if (xAbove >= 0 && xAbove < this.config.width && yAbove >= 0 && yAbove < this.config.height &&
+                    xBelow >= 0 && xBelow < this.config.width && yBelow >= 0 && yBelow < this.config.height) {
+
+                    var tileAbove = this.tiles[yAbove][xAbove];
+                    var tileBelow = this.tiles[yBelow][xBelow];
+
+                    if ((tileBelow == pixelCodes.interior || tileBelow == pixelCodes.dummySand) && (tileAbove >= pixelCodes.sand1)) {
+                        this.grainsDropped++;
+                        this.tiles[yBelow][xBelow] = this.tiles[yAbove][xAbove];
+                        this.tiles[yAbove][xAbove] = pixelCodes.interior;
+                    }
                 }
             };
 
             HourGlass.prototype.dropDummyGrain = function(){
                 var stoppery = Math.floor(this.config.height / 2),
                     stopperx = Math.floor(this.config.width / 2);
-                if (this.tiles[stoppery + 1][stopperx] == pixelCodes.interior) {
-                    this.tiles[stoppery + 1][stopperx] = pixelCodes.dummySand;
+
+                // Find the offset opposite to gravity
+                var gx = -this.gx;
+                var gy = -this.gy;
+
+                // Compute the offset (dx, dy) by rounding gx and gy to nearest integers
+                var dx = Math.round(gx);
+                var dy = Math.round(gy);
+
+                var xBelow = stopperx - dx;
+                var yBelow = stoppery - dy;
+
+                // Check if tiles are within bounds
+                if (xBelow >= 0 && xBelow < this.config.width && yBelow >= 0 && yBelow < this.config.height) {
+
+                    if (this.tiles[yBelow][xBelow] == pixelCodes.interior) {
+                        this.tiles[yBelow][xBelow] = pixelCodes.dummySand;
+                    }
                 }
             };
 
@@ -328,6 +400,10 @@
                 this.time = mins * 60000;
                 this.updateDelay(this.time);
                 this.running = true;
+
+                this.theta = 0;
+                this.angularVelocity = 2 * Math.PI / this.time; // Rotate once over the total time
+
                 var state = {
                     startTime: now,
                     lastFrame: now,
