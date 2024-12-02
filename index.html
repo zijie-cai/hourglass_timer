@@ -1,7 +1,7 @@
 <!DOCTYPE html>
 <html>
 <head>
-    <title>Pixelated Digital Hourglass Visualization</title>
+    <title>Water Flow Hourglass Simulation</title>
     <style>
         body {
             margin: 0;
@@ -14,377 +14,267 @@
 
         canvas {
             border: 1px solid #555;
-            image-rendering: pixelated;
+        }
+
+        #controls {
+            position: absolute;
+            top: 10px;
+            left: 10px;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+
+        #controls button {
+            margin-right: 5px;
+        }
+
+        #controls input[type=range] {
+            width: 100px;
         }
     </style>
 </head>
 <body>
-    <!-- The canvas will be inserted by the script -->
+    <div id="controls">
+        <button id="startButton">Start</button>
+        <button id="resetButton">Reset</button>
+        <label for="hueRange">Sand Hue:</label>
+        <input type="range" id="hueRange" min="0" max="360" value="55">
+    </div>
+    <canvas id="hourglassCanvas"></canvas>
     <script>
-        // Create the pixelated hourglass visualization
-        var createPixelGlass = function(){
-            // Numerical codes representing different cell types
-            var pixelCodes = {
-                background: 0,
-                interior: 1,
-                walls: 2,
-                walls2: 3,
-                base: 4,
-                base2: 5,
-                base3: 6,
-                stopper: 7,
-                sand1: 8,
-                sand2: 9,
-                sand3: 10,
-                dummySand: 11, // Dummy sand not really simulated, visual effect only
-            };
+        // Get canvas and context
+        const canvas = document.getElementById('hourglassCanvas');
+        const ctx = canvas.getContext('2d');
 
-            var defaultConfig = {
-                pixelSize: 2.9,       // This has the same effect as scaling the canvas but without loss of interactivity
-                width: 99,            // Total cells wide
-                height: 100,          // Total cells high
-                offsetX: 0,           // X Offset entire cell grid within canvas 
-                offsetY: 0,           // Y Offset entire cell grid within canvas
-                cylinderHeight: 30,   // Adjusted to make the middle gap smaller
-                timeStep: 30,         // Smaller number gives smoother animation but worse performance
-                touchRadius: 4,       // Size of area affected by mouse/touch
-                interactive: true,    // Whether or not the mouse/touch will affect sand
-                transparentBackground: true,
-                pixelColors : {
-                    0: "rgba(1,1,1,1)",  // Background color
-                    1: "rgba(0,0,50,.1)", // Interior
-                    2: "#6acfdd",        // Hourglass walls
-                    3: "#ffef00",        // Hourglass walls 2
-                    4: "#6e4e03",        // Base
-                    5: "#553c01",        // Base 2
-                    6: "#845600",        // Base 3
-                    7: "#e2e2e2",        // Stopper
-                    8: "hsl(55,70%,60%)", // Sand 1
-                    9: "hsl(55,65%,50%)", // Sand 2
-                    10:"hsl(55,80%,65%)", // Sand 3 
-                    11: "#ffe96c",       // Dummy sand 
-                }
-            };
+        // Set canvas dimensions
+        canvas.width = 400;
+        canvas.height = 600;
 
-            // Make mousePosition accessible throughout the script
-            var mousePosition = { x: 0, y: 0 };
+        // Particle properties
+        const particles = [];
+        let numParticles = 500;
+        const gravity = 0.1;
+        let sandHue = 55;
 
-            var HourGlass = function(config){
-                this.config = config || defaultConfig;
-                this.tiles = [];
-                this.canvas = document.createElement('canvas');
-                this.canvas.width = this.config.width * this.config.pixelSize;
-                this.canvas.height = this.config.height * this.config.pixelSize;
-                this.grainsTotal = 0;
-                this.grainsDropped = 0;
-                this.time = 0;
-                this.running = false;
-                this.grainDropDelay = 0;
-                this.leftToRight = false;
-                this.create();
+        // Timer properties
+        let totalTime = 60000; // default 1 minute
+        let startTime = null;
+        let running = false;
 
-                // Add mouse event listener if interactive
-                if (this.config.interactive) {
-                    var me = this;
-                    this.canvas.addEventListener('mousemove', function(event){
-                        var rect = me.canvas.getBoundingClientRect();
-                        var scaleX = me.config.width / rect.width;
-                        var scaleY = me.config.height / rect.height;
-                        mousePosition.x = (event.clientX - rect.left) * scaleX;
-                        mousePosition.y = (event.clientY - rect.top) * scaleY;
-                    });
-                }
-            };
+        // Hourglass dimensions
+        const hourglassWidthTop = 300;
+        const hourglassWidthBottom = 300;
+        const hourglassHeight = 500;
+        const hourglassX = canvas.width / 2;
+        const hourglassY = canvas.height / 2;
+        const neckWidth = 10;
+        const neckPosition = canvas.height / 2;
 
-            HourGlass.prototype.create = function(){
-                this.running = false;
+        // Controls
+        const startButton = document.getElementById('startButton');
+        const resetButton = document.getElementById('resetButton');
+        const hueRange = document.getElementById('hueRange');
 
-                // Build top and bottom halves of the hourglass
-                var topHalf = [],
-                    bottomHalf = [],
-                    w = this.config.width,
-                    h = this.config.height,
-                    z = this.config.cylinderHeight;
+        // Initialize particles in the upper chamber
+        function initializeParticles() {
+            particles.length = 0;
+            for (let i = 0; i < numParticles; i++) {
+                particles.push({
+                    x: hourglassX + (Math.random() - 0.5) * (hourglassWidthTop - 20),
+                    y: hourglassY - hourglassHeight / 2 + Math.random() * (hourglassHeight / 2 - 20),
+                    vx: 0,
+                    vy: 0,
+                    radius: 3,
+                    color: `hsl(${sandHue}, 70%, 60%)`,
+                    inUpperChamber: true,
+                });
+            }
+        }
 
-                for (var y = 0; y < h / 2; y++) {
-                    var topRow = [],
-                        bottomRow = [];
-                    for (var x = 0; x < w; x++) {
+        // Update particles
+        function updateParticles(deltaTime) {
+            for (let particle of particles) {
+                // Apply gravity
+                particle.vy += gravity;
 
-                        // Hourglass base
-                        if ((y >= 0 && y <= 2) && (x > z - 3 && x < w - z + 2)) {
-                            var c = pixelCodes.base;
-                            if (y == 1) c = pixelCodes.base2;
-                            else if (y == 2) c = pixelCodes.base3;
-                            topRow.push(c);
-                            bottomRow.push(c);
-                        }
+                // Update position
+                particle.x += particle.vx;
+                particle.y += particle.vy;
 
-                        // Hourglass walls
-                        else if (x == z || x == z + 1 || x == (w - z - 1) || x == (w - z - 2)) {
-                            // Magic number determines where middle ring lies
-                            var ringRatio = 1.4;
-                            var c = y >= (this.config.cylinderHeight * ringRatio) ? pixelCodes.walls2 : pixelCodes.walls;
-                            topRow.push(c);
-                            bottomRow.push(c);
-                        }
+                // Collision detection with hourglass walls
+                // Upper chamber
+                if (particle.y < neckPosition && particle.inUpperChamber) {
+                    const chamberHeight = neckPosition - (hourglassY - hourglassHeight / 2);
+                    const progress = (particle.y - (hourglassY - hourglassHeight / 2)) / chamberHeight;
+                    const chamberWidth = hourglassWidthTop / 2 - (hourglassWidthTop / 2 - neckWidth / 2) * progress;
+                    const leftWall = hourglassX - chamberWidth;
+                    const rightWall = hourglassX + chamberWidth;
 
-                        // Interior & sand
-                        else if (x > z && x < (w - z - 1)) {
-                            if (Math.random() < 0.33) topRow.push(pixelCodes.sand1);
-                            else if (Math.random() < 0.66) topRow.push(pixelCodes.sand2);
-                            else topRow.push(pixelCodes.sand3);
-                            this.grainsTotal++; // Count the sand
-                            bottomRow.push(pixelCodes.interior);
-                        }
-
-                        // Exterior / background
-                        else {
-                            topRow.push(pixelCodes.background);
-                            bottomRow.push(pixelCodes.background);
-                        }
+                    if (particle.x - particle.radius < leftWall) {
+                        particle.x = leftWall + particle.radius;
+                        particle.vx *= -0.5;
+                    } else if (particle.x + particle.radius > rightWall) {
+                        particle.x = rightWall - particle.radius;
+                        particle.vx *= -0.5;
                     }
 
-                    // Add rows to top/bottom arrays
-                    if (z < w / 2 - 3 && y > this.config.cylinderHeight) z++;
-                    topHalf.push(topRow);
-                    bottomHalf.push(bottomRow);
-                }
-
-                // Reverse bottom and append to top
-                this.tiles = topHalf.concat(bottomHalf.reverse());
-
-                // Remove a single grain from the top to prevent an extra grain
-                this.tiles[Math.floor(h / 2 - 1)][Math.floor(w / 2)] = pixelCodes.interior;
-                this.grainsTotal--;
-
-                // Create Stopper (the grain dropper)
-                this.tiles[Math.floor(h / 2)][Math.floor(w / 2)] = pixelCodes.stopper;
-                this.render();
-            };
-
-            HourGlass.prototype.render = function(){
-                var context = this.canvas.getContext("2d"),
-                    w = this.config.width,
-                    h = this.config.height,
-                    s = this.config.pixelSize,
-                    cw = this.canvas.width,
-                    ch = this.canvas.height;  
-                context.fillStyle = this.config.pixelColors[pixelCodes.background];    
-
-                // Clear canvas for next frame
-                if (this.config.transparentBackground) context.clearRect(0, 0, cw, ch);
-                else context.fillRect(0, 0, cw, ch);
-
-                // Draw cells
-                for (var y = 0; y < h; y++) {
-                    for (var x = 0; x < w; x++) {
-                        var cell = this.tiles[y][x];
-                        // Ignore background tiles
-                        if (cell != pixelCodes.background) {
-                            context.fillStyle = this.config.pixelColors[cell];
-
-                            if (cell == pixelCodes.dummySand){
-                                context.fillStyle = this.config.pixelColors[pixelCodes.sand1];
-                            }
-                            context.fillRect(
-                                (x + this.config.offsetX) * s,
-                                (y + this.config.offsetY) * s,
-                                s,
-                                s
-                            );
+                    // Check if particle can pass through neck
+                    if (particle.y + particle.radius >= neckPosition) {
+                        // Check for blockage (simulate particles stacking at the neck)
+                        const neckParticles = particles.filter(p => Math.abs(p.x - hourglassX) < neckWidth / 2 && p.y >= neckPosition && p.y <= neckPosition + 5);
+                        if (neckParticles.length < 5) {
+                            // Allow particle to pass
+                            particle.inUpperChamber = false;
+                        } else {
+                            // Block particle
+                            particle.y = neckPosition - particle.radius;
+                            particle.vy = 0;
                         }
                     }
                 }
-            };
+                // Lower chamber
+                else {
+                    const chamberHeight = (hourglassY + hourglassHeight / 2) - neckPosition;
+                    const progress = (particle.y - neckPosition) / chamberHeight;
+                    const chamberWidth = neckWidth / 2 + (hourglassWidthBottom / 2 - neckWidth / 2) * progress;
+                    const leftWall = hourglassX - chamberWidth;
+                    const rightWall = hourglassX + chamberWidth;
 
-            HourGlass.prototype.update = function(state){
-                // Keep track of the time that has passed between frames
-                var now = Date.now(),
-                    updated = false,
-                    dt = this.config.timeStep;
-
-                state.timeAcc += now - state.lastFrame;
-                state.lastFrame = now;
-
-                while (state.timeAcc >= dt){
-                    updated = true;
-                    state.timeAcc -= dt;
-                    state.grainTimeAcc += dt;
-                    if (state.grainTimeAcc >= this.grainDropDelay) {
-                        this.updateDelay(this.time - (Date.now() - state.startTime));
-                        state.grainTimeAcc = 0;
-                        this.dropGrain();
-                    } 
-                    else if (Math.random() > 0.8) {
-                        this.dropDummyGrain();
+                    if (particle.x - particle.radius < leftWall) {
+                        particle.x = leftWall + particle.radius;
+                        particle.vx *= -0.5;
+                    } else if (particle.x + particle.radius > rightWall) {
+                        particle.x = rightWall - particle.radius;
+                        particle.vx *= -0.5;
                     }
 
-                    // Alternate update direction to prevent bias
-                    var w = this.config.width,
-                        h = this.config.height,
-                        lr = this.leftToRight;
-                    for (var x = (lr ? w - 1 : 0); (lr ? x > -1 : x < w); (lr ? x-- : x++)) {
-                        for (var y = h - 1; y > -1; y--) {
-                            this.updateCell(x, y);
-                        }
-                    }
-                    this.leftToRight = !this.leftToRight;
-                }
-                return updated;
-            };
-
-            HourGlass.prototype.updateCell = function(x, y){
-                // Only sand cells get updated
-                if (this.tiles[y][x] < pixelCodes.sand1) return;
-                var interior = pixelCodes.interior;
-                // Inspect neighbours
-                var blockedBottom = this.tiles[y + 1][x] > interior,
-                    blockedTop = this.tiles[y - 1][x] > interior,
-                    blockedRight = this.tiles[y][x + 1] > interior,
-                    blockedLeft = this.tiles[y][x - 1] > interior,
-                    blockedBottomLeft = this.tiles[y + 1][x - 1] > interior,
-                    blockedBottomRight = this.tiles[y + 1][x + 1] > interior;
-
-                // Handle mouse interaction with sand
-                if (this.config.interactive) {
-                    var mouseSize = this.config.touchRadius,
-                        dx = this.config.offsetX,
-                        dy = this.config.offsetY,
-                        mx = mousePosition.x,
-                        my = mousePosition.y;
-
-                    if (
-                        x > mx - mouseSize - dx && x < mx + mouseSize - dx &&
-                        y < my + mouseSize / 2 - dy && y > my - mouseSize / 2 - dy
-                    ) {
-                        blockedBottom = true;
-                        blockedBottomLeft = true;
-                        blockedBottomRight = true;
+                    // Bottom collision
+                    if (particle.y + particle.radius > hourglassY + hourglassHeight / 2) {
+                        particle.y = hourglassY + hourglassHeight / 2 - particle.radius;
+                        particle.vy *= -0.5;
+                        particle.vx *= 0.5; // Friction
                     }
                 }
 
-                // Remove dummy sand from simulation
-                if (
-                    this.tiles[y][x] == pixelCodes.dummySand &&
-                    blockedBottom && blockedTop && blockedLeft && blockedRight
-                ) {
-                    this.tiles[y][x] = interior;
-                    return;
-                }
+                // Optional: Add slight horizontal movement
+                particle.vx += (Math.random() - 0.5) * 0.02;
 
-                // Adjust when a grain of sand will move laterally
-                var n = 1,
-                    r = Math.floor(Math.random() * (this.config.cylinderHeight * n)),
-                    w = this.config.width,
-                    h = this.config.height;
-
-                // Movement rules
-                if (!blockedBottom) this.moveCell(x, y, 0, 1); // Down
-                else if (!blockedBottomLeft) this.moveCell(x, y, -1, 1); // Down & left
-                else if (!blockedBottomRight) this.moveCell(x, y, 1, 1); // Down & right
-                else if (x < Math.floor(w / 2) - r && !blockedRight && y < Math.floor(h / 2)) this.moveCell(x, y, 1, 0); // Move right
-                else if (x > Math.floor(w / 2) + r && !blockedLeft && y < Math.floor(h / 2)) this.moveCell(x, y, -1, 0); // Move left  
-                else if (x < Math.floor(w / 2) - r * 3 && !blockedLeft && blockedRight && y > Math.floor(h / 2)) this.moveCell(x, y, -1, 0); // Move left
-                else if (x > Math.floor(w / 2) + r * 3 && !blockedRight && blockedLeft && y > Math.floor(h / 2)) this.moveCell(x, y, 1, 0); // Move right
-            };
-
-            HourGlass.prototype.dropGrain = function(){
-                // The stopper acts like a wall
-                var stoppery = Math.floor(this.config.height / 2),
-                    stopperx = Math.floor(this.config.width / 2),
-                    tileAbove = this.tiles[stoppery - 1][stopperx],
-                    tileBelow = this.tiles[stoppery + 1][stopperx];
-
-                if (
-                    (tileBelow == pixelCodes.interior || tileBelow == pixelCodes.dummySand) &&
-                    (tileAbove >= pixelCodes.sand1)
-                ) {
-                    this.grainsDropped++;
-                    this.moveCell(stopperx, stoppery - 1, 0, 2);
-                }
-            };
-
-            HourGlass.prototype.dropDummyGrain = function(){
-                var stoppery = Math.floor(this.config.height / 2),
-                    stopperx = Math.floor(this.config.width / 2);
-                if (this.tiles[stoppery + 1][stopperx] == pixelCodes.interior) {
-                    this.tiles[stoppery + 1][stopperx] = pixelCodes.dummySand;
-                }
-            };
-
-            HourGlass.prototype.updateDelay = function(t){
-                this.grainDropDelay = Math.floor(t / (this.grainsTotal - this.grainsDropped));
-            };
-
-            HourGlass.prototype.moveCell = function(x, y, x1, y1) {
-                var tmp = this.tiles[y + y1][x + x1];
-                this.tiles[y + y1][x + x1] = this.tiles[y][x];
-                this.tiles[y][x] = tmp;
-            };
-
-            HourGlass.prototype.start = function(mins, callback){
-                var now = Date.now();
-                this.time = mins * 60000;
-                this.updateDelay(this.time);
-                this.running = true;
-                var state = {
-                    startTime: now,
-                    lastFrame: now,
-                    timeAcc: 0,
-                    grainTimeAcc: 0
-                };
-                var me = this;
-                var loop = function(){
-                    if (me.running && me.update(state)) me.render();
-                    if (me.grainsDropped >= me.grainsTotal) {
-                        me.running = false;
-                        if (callback) callback();
+                // Interactivity: Mouse interaction
+                if (mouse.isDown) {
+                    const dx = particle.x - mouse.x;
+                    const dy = particle.y - mouse.y;
+                    const dist = Math.sqrt(dx * dx + dy * dy);
+                    if (dist < 50) {
+                        const angle = Math.atan2(dy, dx);
+                        const force = (50 - dist) / 50;
+                        particle.vx += Math.cos(angle) * force * 0.5;
+                        particle.vy += Math.sin(angle) * force * 0.5;
                     }
-                    else if (me.running === true) {
-                        requestAnimationFrame(loop);
-                    }
-                };
-                loop();
-            };
+                }
+            }
+        }
 
-            HourGlass.prototype.setSandHue = function(hue){
-                this.config.pixelColors[pixelCodes.sand1] = "hsl(" + hue + ",70%,60%)";
-                this.config.pixelColors[pixelCodes.sand2] = "hsl(" + hue + ",65%,50%)";
-                this.config.pixelColors[pixelCodes.sand3] = "hsl(" + hue + ",80%,65%)";
-                this.render();
-            };
+        // Draw everything
+        function draw() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
 
-            var HourGlassController = function(hourglass){
-                this.hourglass = hourglass;
-            };
-            HourGlassController.prototype.start = function(time, callback){
-                this.hourglass.start(time, callback);
-            };
-            HourGlassController.prototype.reset = function(){
-                this.hourglass.create();
-            };
-            HourGlassController.prototype.getCanvas = function(){
-                return this.hourglass.canvas;
-            };
-            HourGlassController.prototype.setHue = function(hue){
-                this.hourglass.setSandHue(hue);
-            };
+            // Draw hourglass outline
+            ctx.strokeStyle = '#6acfdd';
+            ctx.lineWidth = 5;
+            ctx.beginPath();
 
-            return new HourGlassController(new HourGlass());
+            // Left side upper chamber
+            ctx.moveTo(hourglassX - hourglassWidthTop / 2, hourglassY - hourglassHeight / 2);
+            ctx.lineTo(hourglassX - neckWidth / 2, neckPosition);
+
+            // Left side lower chamber
+            ctx.lineTo(hourglassX - hourglassWidthBottom / 2, hourglassY + hourglassHeight / 2);
+
+            // Right side lower chamber
+            ctx.moveTo(hourglassX + hourglassWidthBottom / 2, hourglassY + hourglassHeight / 2);
+            ctx.lineTo(hourglassX + neckWidth / 2, neckPosition);
+
+            // Right side upper chamber
+            ctx.lineTo(hourglassX + hourglassWidthTop / 2, hourglassY - hourglassHeight / 2);
+
+            ctx.stroke();
+
+            // Draw particles
+            for (let particle of particles) {
+                ctx.fillStyle = particle.color;
+                ctx.beginPath();
+                ctx.arc(particle.x, particle.y, particle.radius, 0, Math.PI * 2);
+                ctx.fill();
+            }
+        }
+
+        let lastTime = 0;
+        function animate(timestamp) {
+            if (!lastTime) lastTime = timestamp;
+            const deltaTime = timestamp - lastTime;
+            lastTime = timestamp;
+
+            if (running) {
+                updateParticles(deltaTime);
+                // Check timer
+                const elapsedTime = timestamp - startTime;
+                if (elapsedTime >= totalTime) {
+                    running = false;
+                }
+            }
+            draw();
+            requestAnimationFrame(animate);
+        }
+
+        // Mouse interaction
+        const mouse = {
+            x: 0,
+            y: 0,
+            isDown: false,
         };
+        canvas.addEventListener('mousedown', function (e) {
+            mouse.isDown = true;
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
+        canvas.addEventListener('mouseup', function () {
+            mouse.isDown = false;
+        });
+        canvas.addEventListener('mousemove', function (e) {
+            const rect = canvas.getBoundingClientRect();
+            mouse.x = e.clientX - rect.left;
+            mouse.y = e.clientY - rect.top;
+        });
 
-        // Initialize the hourglass
-        var hourglass = createPixelGlass();
+        // Start button event
+        startButton.addEventListener('click', function () {
+            if (!running) {
+                startTime = performance.now();
+                running = true;
+            }
+        });
 
-        // Append the canvas to the body
-        document.body.appendChild(hourglass.getCanvas());
+        // Reset button event
+        resetButton.addEventListener('click', function () {
+            running = false;
+            initializeParticles();
+            draw();
+        });
 
-        // Start the hourglass (duration in minutes)
-        hourglass.start(1); // Runs for 1 minute
+        // Hue range event
+        hueRange.addEventListener('input', function () {
+            sandHue = hueRange.value;
+            for (let particle of particles) {
+                particle.color = `hsl(${sandHue}, 70%, 60%)`;
+            }
+            draw();
+        });
 
-        // Optional: Change the sand hue
-        // hourglass.setHue(30); // Hue value between 0 and 360
+        // Initialize
+        initializeParticles();
+        draw();
+        requestAnimationFrame(animate);
 
     </script>
 </body>
